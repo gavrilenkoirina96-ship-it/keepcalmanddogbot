@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Бот-анкета для кинолога/психолога @ira.psycho — версия 2.0
+Бот-анкета для кинолога/психолога @ira.psycho — версия 2.1
 Установка: pip install pyTelegramBotAPI
 Запуск: python bot.py
 """
@@ -22,7 +22,6 @@ MAX_TEXT_LENGTH = 500
 
 
 def progress_bar(current, total, size=10):
-    """🟣🟣🟣⚪️⚪️⚪️  3 из 10"""
     filled = round(current / total * size)
     empty  = size - filled
     return "🟣" * filled + "⚪️" * empty + f"  {current} из {total}"
@@ -31,12 +30,14 @@ def progress_bar(current, total, size=10):
 QUESTIONS = [
     {"id": "name",        "text": "Ваше имя",                                                           "type": "text"},
     {"id": "dog_name",    "text": "Кличка собаки",                                                      "type": "text"},
-    {"id": "dog_age",     "text": "Возраст собаки",                                                     "type": "digits"},
+    # возраст — тип text, чтобы можно было писать "2 года", "5 месяцев" и т.д.
+    {"id": "dog_age",     "text": "Возраст собаки",                                                     "type": "text"},
     {"id": "dog_breed",   "text": "Порода собаки (если метис — примерная порода или вес)",              "type": "text"},
     {"id": "how_got",     "text": "Как к вам попал питомец? В каком возрасте?",                         "type": "text"},
     {"id": "problems",    "text": "С какими проблемами поведения своей собаки вы столкнулись?",         "type": "text"},
     {"id": "since_when",  "text": "Как давно это началось и сколько продолжается?",                     "type": "text"},
-    {"id": "priority",    "text": "Каких из них вы хотите решить в первую очередь?",                    "type": "text"},
+    # исправлена опечатка: "Каких" → "Какие"
+    {"id": "priority",    "text": "Какие из них вы хотите решить в первую очередь?",                    "type": "text"},
     {"id": "tried",       "text": "Что вы уже предпринимали для решения этих проблем?",                 "type": "text"},
     {"id": "goal",        "text": "Какой результат вы ждёте от наших занятий?",                         "type": "text"},
     {"id": "good",        "text": "Что хорошего есть в жизни с вашим питомцем? Как вы обычно проводите время вместе?", "type": "text"},
@@ -108,21 +109,24 @@ QUESTIONS = [
     {"id": "extra",       "text": "Любая дополнительная информация о вашей собаке, которую вы считаете важной",
      "type": "text", "skip": True},
 
+    # format — ветка: если "Очное занятие", задаём вопрос про адрес
     {"id": "format",      "text": "Подходящий вам формат занятий",
-     "type": "choice", "options": ["Очное занятие", "Онлайн консультация", "Сопровождение"], "skip": True},
-
-    {"id": "location",    "text": "Ближайшая к вам станция метро или адрес (для очных консультаций)\n\nЕсли онлайн — нажмите «Пропустить»",
-     "type": "text", "skip": True},
+     "type": "choice", "options": ["Очное занятие", "Онлайн консультация", "Сопровождение"],
+     "skip": True,
+     "branch": {
+         "Очное занятие": [
+             {"id": "location", "text": "Ближайшая к вам станция метро или адрес", "type": "text"}
+         ],
+         "Сопровождение": [
+             {"id": "location", "text": "Ближайшая к вам станция метро или адрес", "type": "text"}
+         ],
+     }},
 
     {"id": "source",      "text": "Откуда вы узнали про меня?",                                         "type": "text"},
 
-    {"id": "messenger",   "text": "Где вам удобнее получать обратную связь и итоги занятия?",
-     "type": "choice", "options": ["WhatsApp", "Телеграм", "Другое"], "skip": True},
 
     {"id": "promo",       "text": "Промокод (если есть)\n\nЕсли нет — нажмите «Пропустить»",
      "type": "text", "skip": True},
-
-    {"id": "contact",     "text": "Ваш контактный телефон или ссылка на Telegram",                      "type": "text"},
 ]
 
 
@@ -176,17 +180,30 @@ def send_question(chat_id, state):
 
 
 def format_summary(answers, user):
+    """Оформление анкеты для администратора.
+    Формат каждой строки:
+      Название вопроса
+      *жирный ответ*
+    """
     name     = user.first_name or ""
     username = f"@{user.username}" if user.username else f"ID: {user.id}"
-    lines    = ["🐕 НОВАЯ АНКЕТА ВЛАДЕЛЬЦА", f"От: {name} ({username})", "─" * 35]
+
+    lines = [
+        "🐕 *НОВАЯ АНКЕТА ВЛАДЕЛЬЦА*",
+        f"От: {name} ({username})",
+        "―――――――――――――――――――――――――――――――――――",
+    ]
+
     for q_id, answer in answers.items():
         label = q_id
         for q in _all_questions():
             if q["id"] == q_id:
                 label = q["text"].split("\n")[0]
                 break
-        lines.append(f"\n❓ {label}\n✏️ {answer}")
-    lines += ["\n" + "─" * 35, "✅ Анкета заполнена полностью"]
+        # обычный текст — вопрос, жирный — ответ
+        lines.append(f"\n{label}\n*{answer}*")
+
+    lines += ["\n―――――――――――――――――――――――――――――――――――", "✅ Анкета заполнена полностью"]
     return "\n".join(lines)
 
 
@@ -274,18 +291,8 @@ def handle_answer(message):
         _save_and_advance(message, state, q, "—")
         return
 
-    # ВАЛИДАЦИЯ: только цифры
-    if q["type"] == "digits":
-        if not text.isdigit():
-            bot.send_message(
-                message.chat.id,
-                "Пожалуйста, введите только цифры 🔢",
-                reply_markup=get_text_keyboard(back=(idx > 0))
-            )
-            return
-
     # ВАЛИДАЦИЯ: длина текста
-    if q["type"] in ("text", "digits") and len(text) > MAX_TEXT_LENGTH:
+    if q["type"] in ("text",) and len(text) > MAX_TEXT_LENGTH:
         bot.send_message(
             message.chat.id,
             f"Слишком длинный ответ. Пожалуйста, уложитесь в {MAX_TEXT_LENGTH} символов "
@@ -359,14 +366,14 @@ def _finish(message, state):
     except Exception as e:
         print(f"Ошибка отправки картинки: {e}")
 
-    # Анкета администратору
+    # Анкета администратору — Markdown форматирование
     summary = format_summary(state["answers"], message.from_user)
     try:
         if len(summary) <= 4096:
-            bot.send_message(ADMIN_ID, summary)
+            bot.send_message(ADMIN_ID, summary, parse_mode="Markdown")
         else:
             for chunk in [summary[i:i+4000] for i in range(0, len(summary), 4000)]:
-                bot.send_message(ADMIN_ID, chunk)
+                bot.send_message(ADMIN_ID, chunk, parse_mode="Markdown")
     except Exception as e:
         print(f"Ошибка отправки администратору: {e}")
 
