@@ -12,8 +12,8 @@ import os
 
 # ═══════════════════════════════════════════════
 #  ВСТАВЬТЕ СЮДА СВОИ ДАННЫЕ
-BOT_TOKEN = "ВАШ_ТОКЕН_ОТ_BOTFATHER"
-ADMIN_ID   = 123456789  # ваш Telegram ID из @userinfobot
+BOT_TOKEN = "8662279654:AAGArQhxpyQTZGUJr3VL7trZFCvqWEEQvZ4"
+ADMIN_ID   = 141894747
 # ═══════════════════════════════════════════════
 
 bot = telebot.TeleBot(BOT_TOKEN)
